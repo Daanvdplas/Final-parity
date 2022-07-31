@@ -16,27 +16,84 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
+	use codec::{HasCompact, EncodeLike, MaxEncodedLen};
 	use frame_support::pallet_prelude::*;
+	use sp_std::str::from_utf8;
 	use frame_system::pallet_prelude::*;
+	use frame_support::PalletId;
+	use frame_support::Hashable;
+	use scale_info::prelude::vec;
+	use sp_runtime::traits::{AccountIdConversion, AtLeast32Bit};
 	use frame_support::traits::tokens::fungibles::{Inspect, Transfer};
 
-	type AssetIdOf<T: Config> = <T::MultiAssets as Inspect<T::AccountId>>::AssetId;
+	type TokenIdOf<T: Config> = <T::Tokens as Inspect<T::AccountId>>::AssetId;
+	type BalanceOf<T: Config> = <T::Tokens as Inspect<T::AccountId>>::Balance;
+	
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
-		type MultiAssets: Inspect<Self::AccountId> + Transfer<Self::AccountId>;
+		type AssetId: Member
+		+ Parameter
+		+ Default
+		+ Copy
+		+ HasCompact
+		+ MaybeSerializeDeserialize
+		+ MaxEncodedLen
+		+ TypeInfo 
+		+ EncodeLike;
+
+		type Tokens: Inspect<Self::AccountId, AssetId = Self::AssetId> + Transfer<Self::AccountId, AssetId = Self::AssetId>;
+		type PalletId: Get<PalletId>;
 	}
+
+	// pub struct TokenPair<T: Config> {
+	// 	token_a: TokenIdOf<T>,
+	// 	token_b: TokenIdOf<T>,
+	// }
+
+	// impl PartialEq for TokenPair<T> {
+	// 	fn eq(&self, other: &Self) -> bool {
+	// 		if self.token_a == other.token_a && self.token_b == other.token_b {
+	// 			return true;
+	// 		} else if self.token_b == other.token_a && self.token_a == other.token_b {
+	// 			return true;
+	// 		} else if self.token_a == other.token_b && self.token_b == other.token_a {
+	// 			return true;
+	// 		} else {
+	// 			return false;
+	// 		}
+	// 	}
+	// }
+
+	// pub struct Pool<T: Config> {
+	// 	pool_id: sp_runtime::AccountId32,
+	// 	token_pair: TokenPair<T>,
+	// 	token_a: (TokenIdOf<T>, BalanceOf<T>),
+	// 	token_b: (TokenIdOf<T>, BalanceOf<T>),
+	// }
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
+	
 
+	// Keeps track of all the dex pools and their connected token pair.
 	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	pub type Something<T> = StorageValue<_, u32>;
+	pub(super) type AllPools<T: Config> = StorageMap<_, Twox64Concat, (TokenIdOf<T>, TokenIdOf<T>), T::AccountId, ValueQuery>;
+
+	// Keeps track of all the dex pools an individual has provided liquidity to.
+	// #[pallet::storage]
+	// pub(super) type AccountToPools<T: Config> = StorageMap<
+		// _,
+		// Twox64Concat,
+		// <T as frame_system::Config>::AccountId,
+		// (TokenIdOf<T>, TokenIdOf<T>,
+		// ValueQuery)
+		// >;
+
 
 	// Pallets use events to inform users when important changes are made.
 	// https://docs.substrate.io/v3/runtime/events-and-errors
@@ -48,55 +105,113 @@ pub mod pallet {
 		SomethingStored(u32, T::AccountId),
 	}
 
-	// Errors inform users that something went wrong.
+	// All the Errors that can occur while trying to swap, add liquidity and withdraw liquidity
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
-		StorageOverflow,
+		/// When user wants to provide liquidity with identical tokens
+		IdenticalTokensError,
+		/// When user doesn't have enough funds for both tokens.
+		NotEnoughFunds,
+		/// When user doesn't have enough funds for token a.
+		NotEnoughFundsTokenA,
+		/// When user doesn't have enough funds for token b.
+		NotEnoughFundsTokenB,
+
 	}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
+	impl<T: Config> Pallet<T> 
+		where <T::Tokens as Inspect<T::AccountId>>::AssetId: AtLeast32Bit + Encode {
+		/// Funtion to provide liquidity.
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
 		pub fn add_liquidity(
 			origin: OriginFor<T>,
-			token_a: AssetIdOf) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/v3/runtime/origins
-			let who = ensure_signed(origin)?;
+			token_a: TokenIdOf<T>,
+			token_b: TokenIdOf<T>,
+			token_a_amount: BalanceOf<T>,
+			token_b_amount: BalanceOf<T>,
+		) -> DispatchResult {
+			
+			// Check if extrinsic was signed
+			let wallet = ensure_signed(origin)?;
+			// Check if tokens are not the same and order deterministically
+			ensure!(token_a != token_b, Error::<T>::IdenticalTokensError);
 
-			// Update storage.
+			// Self::check_balance(wallet, token_a, token_b, token_a_amount, token_b_amount)?;
+			// if let Some(poolid) = Self::check_if_pool_exists(token_a, token_b) {
+			// 	todo!("stake to poolid");
+			// }
+			// todo!("create new pool and poolid");
 
-			// Emit an event.
-			// Return a successful DispatchResultWithPostInfo
+			// new_pool = Self::new_pool(String::from("pool"));
+
+
+			Ok(())
+		}
+	}
+
+		// Function to withdraw liquidity.
+		// #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		// pub fn withdraw_liquidity(
+		// 	origin: OriginFor<T>,
+		// 	token_a: AssetIdOf<T>,
+		// 	token_b: AssetIdOf<T>,
+		// 	rate: u32,
+		// 	token_a_amount: BalanceOf<T>,
+		// 	token_b_amount: BalanceOf<T>,
+		// ) -> DispatchResult {
+			
+		// 	// Check if extrinsic was signed
+		// 	let wallet = ensure_signed(origin)?;
+
+		// 	Ok(())
+		// }
+	// To avoid cases of division by zero a minimum number of tokens have to exist in a pool.
+	//pub const MINIMUM_LIQUIDITY = 1000u64;
+
+	// Pallet internal functions
+    impl<T: Config> Pallet<T> 
+		where <T::Tokens as Inspect<T::AccountId>>::AssetId: Ord + PartialOrd {
+		fn check_balance(
+			wallet: <T as frame_system::Config>::AccountId,
+			token_a: TokenIdOf<T>,
+			token_b: TokenIdOf<T>,
+			token_a_amount: BalanceOf<T>,
+			token_b_amount: BalanceOf<T>,
+		) -> DispatchResult {
+			// Check if wallet has balance of token_a and token_b
+			let balance_a = T::Tokens::balance(token_a, &wallet);
+			let balance_b = T::Tokens::balance(token_b, &wallet);
+
+			// Check if wallet has sufficient funds for balance transfer
+			ensure!(balance_a >= token_a_amount || balance_b >= token_b_amount, Error::<T>::NotEnoughFunds);
+			ensure!(balance_a >= token_a_amount, Error::<T>::NotEnoughFundsTokenA);
+			ensure!(balance_b >= token_b_amount, Error::<T>::NotEnoughFundsTokenB);
 			Ok(())
 		}
 
-		/// An example dispatchable that may throw a custom error.
-		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => return Err(Error::<T>::NoneValue.into()),
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
+		fn check_if_pool_exists(token_a: TokenIdOf<T>, token_b: TokenIdOf<T>) -> T::AccountId {
+			let mut vec = vec![token_a, token_b];
+			vec.sort();
+			let tokenpair = (vec[0], vec[1]);
+			if let Some(poolid) = AllPools::<T>::get(&tokenpair) {
+				return poolid;
 			}
+			let mut hashed_tokena = vec[0].twox_64_concat();
+			let mut hashed_tokenb = vec[1].twox_64_concat();
+			hashed_tokena.append(&mut hashed_tokenb);
+			let new_pool_id = sp_std::str::from_utf8(&hashed_tokena).unwrap();
+			T::PalletId::get().into_sub_account_truncating(new_pool_id)
 		}
+
+		// fn concatenate_hash_values(left: <T as pallet::Config>::Hashing, right: <T as pallet::Config>::Hashing) -> <T as Config>::Hashing {
+		// 	let hash1: String = left.to_string();
+		// 	let hash2: String = right.to_string();
+		
+		// 	let result = hash1 + &hash2;
+		// 	<T as Config>::Hashing::hash(&result)
+		// }
+		//fn mint_lptoken();
+		//fn burn_lptoken(); 
 	}
 }
