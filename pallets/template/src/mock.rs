@@ -8,7 +8,7 @@ use sp_runtime::{
 };
 use pallet_assets;
 use pallet_balances;
-use frame_support::parameter_types;
+use frame_support::{parameter_types, PalletId};
 use system::EnsureRoot;
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -97,10 +97,18 @@ parameter_types! {
 	pub const StringLimit: u32 = 50;
 }
 
+parameter_types! {
+	pub DEX_pallet: PalletId = PalletId(*b"DEX_POOL");
+	pub const MaxLiquidityProviders: u32 = 6;
+}
+
 impl pallet_template::Config for Test {
 	type Event = Event;
     type Tokens = Assets;
+	type PalletId = DEX_pallet;
+	type MaxLiquidityProviders = MaxLiquidityProviders;
 }
+
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {

@@ -1,36 +1,36 @@
-use sp_runtime::traits::IntegerSquareRoot;
-use sp_std::ops::{Mul, Div};
+// use sp_runtime::traits::IntegerSquareRoot;
+use sp_arithmetic::traits::{CheckedAdd, CheckedMul, CheckedDiv, IntegerSquareRoot};
+// use sp_std::ops::{Mul, Div};
 
 pub struct DexPricer;
 
-const PRECISION: u128 = 1_000_000;
+const PRECISION: u32 = 1_000_000;
 
 impl DexPricer {
-	pub fn new_pool_function<T: IntegerSquareRoot + Mul<Output = T>>(
+
+	pub fn new_pool_function<T: IntegerSquareRoot + CheckedAdd + CheckedMul + CheckedDiv>(
 		a: T,
 		b: T,
 	) -> T {
-		let constant_k = a * b;
+		let constant_k = a.checked_mul(&b).unwrap();
 		constant_k.integer_sqrt()
 	}
-
-	pub fn share_to<T: IntegerSquareRoot + Div<Output = T> + Mul<Output = T>>(
+	
+	pub fn share_to<T: IntegerSquareRoot + CheckedAdd + CheckedMul<Output = T> + From<u32> + CheckedDiv>(
 		a: T,
 		b: T,
 	) -> T {
-		// todo! * PRECISION
-		let incr_a = a;
-		let share = incr_a / b;
+		let incr_a = a.checked_mul(&PRECISION.into()).unwrap();
+		let share = incr_a.checked_div(&b).unwrap();
 		share
 	}
 
-	pub fn multiply_to<T: IntegerSquareRoot + Div<Output = T> + Mul<Output = T>>(
+	pub fn multiply_to<T: IntegerSquareRoot + CheckedAdd + CheckedMul + From<u32> + CheckedDiv<Output = T>>(
 		share: T,
 		lp_minted: T,
 	) -> T {
-		let almost_lp_reward = share * lp_minted;
-		// todo! / PRECISION
-		let lp_reward = almost_lp_reward;	
+		let almost_lp_reward = share.checked_mul(&lp_minted).unwrap();
+		let lp_reward = almost_lp_reward.checked_div(&PRECISION.into()).unwrap();	
 		lp_reward
 	}
 }

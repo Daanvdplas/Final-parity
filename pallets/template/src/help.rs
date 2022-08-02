@@ -96,4 +96,28 @@ fn help_withdraw_liq(tokenpair, wallet, lp_token) -> DispatchResult {
 					tokenpair: Vec<TokenIdOf<T>>,
 					tokenpair_id: [u8; 16],
 					lp_token: TokenIdOf<T>,
-				}
+
+// #[test]
+// fn MAX_and_negative() {
+//     new_test_ext().execute_with(|| {
+
+// 		assert_noop!(TemplateModule::deposit_liquidity(Origin::signed(USER), NOASSET1, ETH, NEGATIVE, PLEDGE), Error::<Test>::InvalidToken);
+// 		assert_noop!(TemplateModule::deposit_liquidity(Origin::signed(USER), NOASSET1, ETH, TOO_LARGE, PLEDGE), Error::<Test>::InvalidToken);
+
+// 		assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(USER), NOASSET1, ETH, LP), Error::<Test>::InvalidToken);
+// 	});
+// }	}
+
+		// type AssetId: Member
+		// + Parameter
+		// + Default
+		// + Copy
+		// + HasCompact
+		// + MaybeSerializeDeserialize
+		// + MaxEncodedLen
+		// + TypeInfo 
+		// + EncodeLike;
+
+		// type Tokens: Inspect<Self::AccountId, AssetId = Self::AssetId>
+		//  + Transfer<Self::AccountId, AssetId = Self::AssetId>
+		//  + Mutate<Self::AccountId, AssetId = Self::AssetId>;
