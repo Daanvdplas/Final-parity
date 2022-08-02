@@ -265,6 +265,9 @@ impl pallet_sudo::Config for Runtime {
 
 parameter_types! {
 	pub const DEX_pallet: PalletId = PalletId(*b"DEX");
+	pub const LpToken: LpToken = 1u32;				
+	pub const MaxLiquidityProviders = 6u32;
+	pub const MaxBalance = 340_282_366_920_938_463_463_374_607_431_768_211_455u128
 }
 
 /// Configure the pallet-template in pallets/template.
@@ -272,6 +275,9 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 	type Tokens = Assets;
 	type PalletId = DEX_pallet;
+	type MaxLiquidityProviders = MaxLiquidityProviders;
+	type LpToken = LpToken;				
+	typr MaxBalance = MaxBalance;
 }
 
 parameter_types! {

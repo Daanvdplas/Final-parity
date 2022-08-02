@@ -14,7 +14,7 @@ const MINT: u128 = 1_000_000_000_000_000_000_000u128;
 #[test]
 fn provide_liquidity_without_tokens() {
     new_test_ext().execute_with(|| {
-		assert_noop!(TemplateModule::add_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT), Error::<Test>::NotEnoughFunds);
+		assert_noop!(TemplateModule::deposit_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT), Error::<Test>::NotEnoughFunds);
     });
 }
 
@@ -36,7 +36,7 @@ fn provide_liquidity_with_enough_funds() {
         Assets::create(origin, ASSET2, USER, 1);
 		// Mint token_a
 		Assets::mint_into(ASSET2, &USER, MINT);
-        assert_ok!(TemplateModule::add_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT));
+        assert_ok!(TemplateModule::deposit_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT));
     });
 }
 
@@ -48,7 +48,7 @@ fn provide_liquidity_with_too_little_of_tokens_b() {
         Assets::create(origin, ASSET1, USER, 1);
 		Assets::mint_into(ASSET1, &USER, MINT);
 
-		assert_noop!(TemplateModule::add_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT), Error::<Test>::NotEnoughFundsTokenB);
+		assert_noop!(TemplateModule::deposit_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT), Error::<Test>::NotEnoughFundsTokenB);
 	});
 }
 
@@ -60,6 +60,6 @@ fn provide_liquidity_with_too_little_of_tokens_a() {
         Assets::create(origin, ASSET2, USER, 1);
 		Assets::mint_into(ASSET2, &USER, MINT);
 
-		assert_noop!(TemplateModule::add_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT), Error::<Test>::NotEnoughFundsTokenA);
+		assert_noop!(TemplateModule::deposit_liquidity(Origin::signed(USER), ASSET1, ASSET2, ASSET1_AMOUNT, ASSET2_AMOUNT), Error::<Test>::NotEnoughFundsTokenA);
 	});
 }

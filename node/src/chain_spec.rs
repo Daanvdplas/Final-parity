@@ -134,17 +134,35 @@ fn testnet_genesis(
 ) -> GenesisConfig {
 		let alice = endowed_accounts.get(0).unwrap();
 
-		let mut accounts = endowed_accounts
+		let mut lp_tokens = endowed_accounts
 			.iter()
-			.map(|acc| (1u32, acc.clone(), 1_000_000_000_000_000_000_000u128))
+			.map(|acc| (1u32, acc.clone(), 0u128))
 			.collect::<Vec<_>>();
 
-		let mut second_account = endowed_accounts
+		let mut DOT = endowed_accounts
 			.iter()
-			.map(|acc| (2u32, acc.clone(), 1_000_000_000_000_000_000_000u128))
+			.map(|acc| (2u32, acc.clone(), 5_000_000_000u128))
+			.collect::<Vec<_>>();
+			
+		let mut ETH = endowed_accounts
+			.iter()
+			.map(|acc| (3u32, acc.clone(), 1_000_000_000u128))
 			.collect::<Vec<_>>();
 
-		accounts.append(&mut second_account);
+		let mut ADA = endowed_accounts
+			.iter()
+			.map(|acc| (4u32, acc.clone(), 10_000_000_000u128))
+			.collect::<Vec<_>>();
+
+		let mut BTC = endowed_accounts
+			.iter()
+			.map(|acc| (5u32, acc.clone(), 100_000_000u128))
+			.collect::<Vec<_>>();
+		
+		lp_tokens.append(&mut DOT);
+		lp_tokens.append(&mut ETH);
+		lp_tokens.append(&mut ADA);
+		lp_tokens.append(&mut BTC);
 
 	GenesisConfig {
 		system: SystemConfig {
@@ -171,10 +189,16 @@ fn testnet_genesis(
 				assets: vec![
 					(1u32, alice.clone(), false, 1000),
 					(2u32, alice.clone(), false, 1000),
+					(3u32, alice.clone(), false, 1000),
+					(4u32, alice.clone(), false, 1000),
+					(5u32, alice.clone(), false, 1000),
 				],
 				metadata: vec![
-					(1u32, b"MAGIC".to_vec(), b"MAGIC".to_vec(), 12u8),
-					(2u32, b"BEANS".to_vec(), b"BEANS".to_vec(), 12u8),
+					(1u32, b"LPTOKENS".to_vec(), b"LPTOKENS".to_vec(), 6u8),
+					(2u32, b"DOT".to_vec(), b"DOT".to_vec(), 6u8),
+					(3u32, b"ETH".to_vec(), b"ETH".to_vec(), 6u8),
+					(4u32, b"ADA".to_vec(), b"ADA".to_vec(), 6u8),
+					(5u32, b"BTC".to_vec(), b"BTC".to_vec(), 6u8),
 				],
 				accounts,
 			}
