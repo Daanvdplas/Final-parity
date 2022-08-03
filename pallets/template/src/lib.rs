@@ -90,6 +90,10 @@ pub mod pallet {
 			token_b: TokenIdOf<T>,
 		},
 		// SwapAccured
+		SwapOccured {
+			from: T::AccountId,
+			to: T::AccountId,
+		}
 	}
 
 	// ERROR
@@ -105,17 +109,16 @@ pub mod pallet {
 		NotEnoughFundsTokenB,
 		/// For withdrawing liquidity from a pool that doesn't exist.
 		PoolNotFound,
-		/// An overflow in amount of LP tokens minted has occured.
-		Overflow,
 		/// To many liquidity providers which shouldn't be possible.
 		LiqProvidersOverflow,
 		/// Can't provide liquidity with this token. 
 		InvalidToken,
 		/// Defensive error.
-		NoLpTokens,
+		NoTokens,
 		/// Wallet has not provided liquidity to this pool
 		NoLiquidityProvided,
-
+		/// Math problem
+		MathProblem,
 	}
 
 	// HOOKS
@@ -179,11 +182,11 @@ pub mod pallet {
 			// Check for other tokens than the allowed tokens to provide liquidity with.
 			Self::check_if_valid_tokens(token_a, token_b)?;
 
-			// Check if user has provided lp tokens.
+			// Check if user has lp tokens.
 			let lp_balance = T::Tokens::balance(lp_token, &wallet);
 			if lp_balance == 0u32.into() {
 				// If not throw error
-				ensure!(false, Error::<T>::NoLpTokens);
+				ensure!(false, Error::<T>::NoTokens);
 			}
 
 			// Create withdrawal struct where tokens are ordered, the amounts are ordered to the tokens.
@@ -202,11 +205,91 @@ pub mod pallet {
 			}
 			Ok(())
 		}
+		
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+		pub fn swap(
+			origin: OriginFor<T>,
+			from_token: TokenIdOf<T>,
+			to_token: TokenIdOf<T>,
+			swap_amount: BalanceOf<T>,
+		) -> DispatchResult {
+			// Check if extrinsic was signed.
+			let wallet = ensure_signed(origin)?;
+
+			// Check for other tokens than the allowed tokens to provide liquidity with.
+			Self::check_if_valid_tokens(from_token, to_token)?;
+
+			// Check is user has token balance
+			let from_token_balance = T::Tokens::balance(from_token, &wallet);
+			if from_token_balance < swap_amount {
+				// If not throw error
+				ensure!(false, Error::<T>::NotEnoughFunds);
+			}
+
+			let mut tokenpair = vec![from_token, to_token];
+			tokenpair.sort();
+
+			// Create token pair ID
+			let token_pair_id = Self::create_token_pair_id(tokenpair[0], tokenpair[1]);
+
+			// Check if pool already exists
+			if let Ok(pool) = AllPools::<T>::try_get(&token_pair_id) {
+				// Make swap
+				Self::make_swap(wallet, pool, (from_token, to_token), swap_amount)?;	
+			} else {
+				// Pool does not exist yet
+				ensure!(false, Error::<T>::PoolNotFound);
+			}
+			Ok(())
+		}
 	}
 
 	// FUNCTIONS
     impl<T: Config> Pallet<T>
 		where TokenIdOf<T>: Ord + PartialOrd + AtLeast32Bit + Copy {
+		fn make_swap(
+			wallet: T::AccountId,
+			pool_id: T::AccountId,
+			token_swap: (TokenIdOf<T>, TokenIdOf<T>),
+			swap_amount: BalanceOf<T>,
+		) -> DispatchResult {
+
+			let pool_balance_a = T::Tokens::balance(token_swap.0, &wallet);
+			let pool_balance_b = T::Tokens::balance(token_swap.1, &wallet);
+			
+			let mut swap_reward = 0u32.into();
+			// Calculate swap
+			match DexPricer::swap(swap_amount, (pool_balance_a, pool_balance_b)) {
+				Some(x) => swap_reward = x,
+				None => ensure!(false, Error::<T>::MathProblem),
+			}
+			
+			// Transfer tokens from user's wallet to pool's wallet
+			T::Tokens::transfer(
+				token_swap.0, 
+				&wallet,
+				&pool_id,
+				swap_amount,
+				true
+			)?;
+
+			// Transfer tokens from pool's wallet to user's wallet
+			T::Tokens::transfer(
+				token_swap.1, 
+				&pool_id,
+				&wallet,
+				swap_reward,
+				true
+			)?;
+
+			// Swap succesful
+			Self::deposit_event(Event::SwapOccured {
+				from: wallet,
+				to: pool_id,
+			});
+			Ok(())
+		}
+
 		fn check_balances(
 			wallet: &T::AccountId,
 			token_a: TokenIdOf<T>,
@@ -312,6 +395,17 @@ pub mod pallet {
 			}
 		}
 
+		fn check_swap_token_a(from_token: TokenIdOf<T>, to_token: TokenIdOf<T>) -> (TokenIdOf<T>, TokenIdOf<T>, bool) {
+			// Check for from_token in sorted manner
+			let mut tokenpair = vec![from_token, to_token];
+			tokenpair.sort();
+			if tokenpair[0] == from_token {
+				(from_token, to_token, true)
+			} else {
+				(to_token, from_token, false)
+			}
+		}
+
 		fn check_if_liq_is_provided(wallet: &T::AccountId, pool_id: &T::AccountId) -> DispatchResult {
 			let liq_providers = LiquidityProviders::<T>::get(pool_id);
 			if let Some(_) = liq_providers.iter().position(|id| id == wallet) {
@@ -332,6 +426,7 @@ pub mod pallet {
 			if new_pool_bool {
 				Self::deposit_to_new_pool(&deposit, &wallet, pool_id.clone())?;	
 			} else {
+				// Self::deposit_calculations(deposit, &wallet, pool)
 				Self::deposit_to_existing_pool(&deposit, &wallet, &pool_id)?;
 			}
 
@@ -364,8 +459,12 @@ pub mod pallet {
 		}
 
 		fn deposit_to_new_pool(deposit: &Deposit<T>, wallet: &T::AccountId, pool_id: T::AccountId) -> DispatchResult {
+			let mut lp_reward = 0u32.into();
 			// Calculate lp reward
-			let lp_reward = DexPricer::new_pool_function(deposit.quantity_token_a, deposit.quantity_token_b);
+			match DexPricer::new_pool_function(deposit.quantity_token_a, deposit.quantity_token_b) {
+				Some(x) => lp_reward = x,
+				None => ensure!(false, Error::<T>::MathProblem),
+			}
 
 			// A funny but not perfect way of creating a save lp token id by decoding the token pair id
 			let maybe_value = u32::decode(&mut &*deposit.tokenpair_id.to_vec());
@@ -389,23 +488,13 @@ pub mod pallet {
 		}
 
 		fn deposit_to_existing_pool(deposit: &Deposit<T>, wallet: &T::AccountId, pool_id: &T::AccountId) -> DispatchResult {
-			// Get all liq providers' wallets addresses
-			let liq_providers = LiquidityProviders::<T>::get(pool_id);
+			// Function to check for no more than 4 liq providers.
+			// Shouldn't be possible because there are only 4 users.
+			// Wasn't really sure whether I needed it.
+			Self::check_liq_providers_overflow(wallet, pool_id)?;
 
-			// See if wallet already provided liquidity to this pool
-			if let Some(_) = liq_providers.iter().position(|id| id == wallet) {
-				// If so, continue
-				();
-			} else {
-				// If not, add wallet to the list 
-				LiquidityProviders::<T>::try_append(pool_id, wallet).map_err(|_| Error::<T>::LiqProvidersOverflow)?;
-			}
-
-			// Obtain token a amount in the pool
-			let pool_amount = T::Tokens::balance(deposit.tokenpair[0], &pool_id);
-
-			// Calculate the share of the pledge, in the wallet, to the pool amount (based on token a)
-			let share = DexPricer::share_to(deposit.quantity_token_a, pool_amount);
+			// Obtain token a & token b amount from the pool
+			let pool_amount_a = T::Tokens::balance(deposit.tokenpair[0], &pool_id);
 
 			// Again, a funny but deterministic way of obtaining the lp token ID
 			let maybe_value = u32::decode(&mut &*deposit.tokenpair_id.to_vec());
@@ -418,12 +507,31 @@ pub mod pallet {
 			// Get amount of lp tokens given out already by the pool
 			let lp_minted = T::Tokens::balance(lp_token_id, &pool_id);
 
-			// Calculate the lp reward for the wallet
-			let lp_reward = DexPricer::multiply_to(share, lp_minted);
+			let mut lp_reward = 0u32.into();
+			// Calculate lp reward
+			match DexPricer::existing_pool_function(deposit.quantity_token_a, pool_amount_a, lp_minted) {
+				Some(x) => lp_reward = x,
+				None => ensure!(false, Error::<T>::MathProblem),
+			}
 
 			// Give wallet lp reward as well as updating the total amount of lp tokens given out (by minting the token)
 			T::Tokens::mint_into(lp_token_id, &wallet, lp_reward)?;
 			T::Tokens::mint_into(lp_token_id, &pool_id, lp_reward)?;
+			Ok(())
+		}
+
+		fn check_liq_providers_overflow(wallet: &T::AccountId, pool_id: &T::AccountId) -> DispatchResult {
+			// Get all liq providers' wallets addresses
+			let liq_providers = LiquidityProviders::<T>::get(pool_id);
+
+			// See if wallet already provided liquidity to this pool
+			if let Some(_) = liq_providers.iter().position(|id| id == wallet) {
+				// If so, continue
+				();
+			} else {
+				// If not, add wallet to the list 
+				LiquidityProviders::<T>::try_append(pool_id, wallet).map_err(|_| Error::<T>::LiqProvidersOverflow)?;
+			}
 			Ok(())
 		}
 
@@ -452,7 +560,7 @@ pub mod pallet {
 
 			// If more lp tokens than lp minted my calculations were not precise enough and total pool is for wallet.
 			// Would have done this differently if I had tested the math more properly
-			if lp_tokens > lp_minted {
+			if lp_tokens >= lp_minted {
 				// Update tokens given out by pool and burn tokens from wallet
 				T::Tokens::burn_from(lp_token_id, &pool_id, lp_tokens)?;
 				T::Tokens::burn_from(lp_token_id, &wallet, lp_tokens)?;
@@ -460,20 +568,32 @@ pub mod pallet {
 				// Withdrawal succesful
 				Self::withdrawal_event(&withdrawal, &wallet, &pool_id, quantity_token_a, quantity_token_b)?;
 			} else {
-				// Calculate the share of the lp tokens, in the wallet, to the total mint amount
-				let share = DexPricer::share_to(lp_tokens, lp_minted + lp_tokens);
-
-				// Use this to calculate the share of the wallet to the pool, in token a & b amounts
-				let token_a_reward = DexPricer::multiply_to(share, quantity_token_a);
-				let token_b_reward = DexPricer::multiply_to(share, quantity_token_b);
-
+				
+				// Setting reward variables so I have them in this scope
+				let mut liq_reward_a = 0u32.into();
+				let mut liq_reward_b = 0u32.into();
+				
+				// Calculating the liquidity rewards 
+				// Calculate lp reward a
+				match DexPricer::liquidity_reward(lp_tokens, lp_minted, quantity_token_a) {
+					Some(x) => liq_reward_a = x,
+					None => ensure!(false, Error::<T>::MathProblem),
+				}
+				// Calculate lp reward b
+				match DexPricer::liquidity_reward(lp_tokens, lp_minted, quantity_token_b) {
+					Some(x) => liq_reward_b = x,
+					None => ensure!(false, Error::<T>::MathProblem),
+				}
+				
 				// Update tokens given out by pool and burn tokens from wallet
 				T::Tokens::burn_from(lp_token_id, &pool_id, lp_tokens)?;
 				T::Tokens::burn_from(lp_token_id, &wallet, lp_tokens)?;
 
-				// Withdrawal succesful
-				Self::withdrawal_event(&withdrawal, &wallet, &pool_id, token_a_reward, token_b_reward)?;
+				// Make transfers
+				Self::withdrawal_event(&withdrawal, &wallet, &pool_id, liq_reward_a, liq_reward_b)?;
 			}
+
+			// Withdrawal succesful
 			Self::deposit_event(Event::LiquidityWithdrawn {
 				from: wallet,
 				to: pool_id,

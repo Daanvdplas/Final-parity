@@ -15,6 +15,7 @@ const LP: u32 = 100;
 const NOASSET1: u32 = 0;
 const NOASSET2: u32 = 5;
 const A_LOT: u128 = 1_000_000_000_000;
+const TOO_MUCH: u128 = 1_000_000_000_000_000_000_000_000_000_000u128;
 const PLEDGE: u128 = 50_000_000;
 const NOT_ENOUGH: u128 = 49_000_000;
 
@@ -80,6 +81,10 @@ fn test_invalidtoken_error() {
 		assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(USER), NOASSET1, ETH, LP), Error::<Test>::InvalidToken);
 		assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(USER), DOT, NOASSET2, LP), Error::<Test>::InvalidToken);
 		assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(USER), NOASSET1, NOASSET2, LP), Error::<Test>::InvalidToken);
+
+		assert_noop!(TemplateModule::swap(Origin::signed(USER), NOASSET1, ETH, PLEDGE), Error::<Test>::InvalidToken);
+		assert_noop!(TemplateModule::swap(Origin::signed(USER), DOT, NOASSET2, PLEDGE), Error::<Test>::InvalidToken);
+		assert_noop!(TemplateModule::swap(Origin::signed(USER), NOASSET1, NOASSET2, PLEDGE), Error::<Test>::InvalidToken);
 	});
 }
 
@@ -88,6 +93,7 @@ fn test_notenoughfunds_error() {
     new_test_ext().execute_with(|| {
 		let user = create_user_with_two_assets(USER, DOT, ETH, NOT_ENOUGH);
         assert_noop!(TemplateModule::deposit_liquidity(Origin::signed(user), DOT, ETH, PLEDGE, PLEDGE), Error::<Test>::NotEnoughFunds);
+        assert_noop!(TemplateModule::swap(Origin::signed(user), DOT, ETH, PLEDGE), Error::<Test>::NotEnoughFunds);
     });
 }
 
@@ -136,21 +142,31 @@ fn test_maxliqproviders_error() {
 }
 
 #[test]
-fn test_nolptokens_error() {
+fn test_mathoverflow_error() {
     new_test_ext().execute_with(|| {
-        assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(USER), DOT, ETH, LP), Error::<Test>::NoLpTokens);
-		let user = create_user_with_one_asset(USER, LP, 0);
-        assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(user), DOT, ETH, LP), Error::<Test>::NoLpTokens);
+		// Some how this test does not pass, but it gives me the correct MathProblem error
+		let user = create_user_with_two_assets(USER, DOT, ETH, TOO_MUCH);
+		assert_noop!(TemplateModule::deposit_liquidity(Origin::signed(user), DOT, ETH, TOO_MUCH, TOO_MUCH), Error::<Test>::MathProblem);
     });
 }
 
 #[test]
-fn test_nopoolfound_error() {
+fn test_nolptokens_error() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(USER), DOT, ETH, LP), Error::<Test>::NoTokens);
+		let user = create_user_with_one_asset(USER, LP, 0);
+        assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(user), DOT, ETH, LP), Error::<Test>::NoTokens);
+    });
+}
+
+#[test]
+fn test_poolnotfound_error() {
     new_test_ext().execute_with(|| {
 		// Hacky way of testing the check_if_valid_tokens function without depositing first and letting
 		// the lp token exist
-		let user = create_user_with_one_asset(USER, ETH, A_LOT);
+		let user = create_user_with_two_assets(USER, DOT, ETH, A_LOT);
         assert_noop!(TemplateModule::withdraw_liquidity(Origin::signed(user), DOT, ETH, ETH), Error::<Test>::PoolNotFound);
+        assert_noop!(TemplateModule::swap(Origin::signed(user), DOT, ETH, PLEDGE), Error::<Test>::PoolNotFound);
     });
 }
 
@@ -171,6 +187,17 @@ fn test_withdrawal_ok() {
 		let lp_token_id = u32::decode(&mut &*tokenpair_id.to_vec()).unwrap();
 		let user = create_user_with_two_assets(USER, DOT, ETH, A_LOT);
         assert_ok!(TemplateModule::deposit_liquidity(Origin::signed(user), DOT, ETH, PLEDGE, PLEDGE));
+		let user2 = create_user_with_two_assets(USER2, DOT, ETH, A_LOT);
+        assert_ok!(TemplateModule::deposit_liquidity(Origin::signed(user2), DOT, ETH, PLEDGE, PLEDGE));
         assert_ok!(TemplateModule::withdraw_liquidity(Origin::signed(user), DOT, ETH, lp_token_id));
+    });
+}
+
+#[test]
+fn test_swap_ok() {
+    new_test_ext().execute_with(|| {
+		let user = create_user_with_two_assets(USER, DOT, ETH, A_LOT);
+        assert_ok!(TemplateModule::deposit_liquidity(Origin::signed(user), DOT, ETH, PLEDGE, PLEDGE));
+		assert_ok!(TemplateModule::swap(Origin::signed(user), DOT, ETH, NOT_ENOUGH));
     });
 }
