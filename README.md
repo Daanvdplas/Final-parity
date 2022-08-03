@@ -25,12 +25,16 @@ Using the following extrinsics they could interact with my blockchain/pallet:
 Due to the time stress I've been more careless about a few things what I would have done differently
 if I had more time:
 
-First, I haven't implemented the fees. In addition, I haven't looked carefully how to work 
-with the decimals.
+First, I haven't implemented the fees. In addition, when deposit I haven't calculate the ratio between the
+two tokens within the pool. This ratio should than be used to check if deposit is possible. Last, I would 
+have like to implement queries for the user to check prices and swap returns
 
 Secondly, I think I tested all my errors, but tested only with scenarios specific to that error.
 
 Thirdly, some funtions are messy and the level of clean code could be a lot higher.
+
+Fourthly, I haven't looked carefully to the calculations and the decimals. I also haven't tested my
+math functions...
 
 In general, I had to rush a lot, really want to go over everything a let it sink.
 
