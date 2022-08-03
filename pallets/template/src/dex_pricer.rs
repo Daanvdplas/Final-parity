@@ -1,12 +1,23 @@
-// use sp_runtime::traits::IntegerSquareRoot;
 use sp_arithmetic::traits::{CheckedAdd, CheckedMul, CheckedDiv, IntegerSquareRoot};
-// use sp_std::ops::{Mul, Div};
+use frame_support::*;
 
 pub struct DexPricer;
 
 const PRECISION: u32 = 1_000_000;
 
 impl DexPricer {
+
+	// pub fn new_pool_function<t: integersquareroot + checkedadd + checkedmul + checkeddiv>(
+	// 	a: t,
+	// 	b: t,
+	// ) -> result<t, _> {
+	// 	let maybe_value = a.checked_mul(&b).unwrap();
+	// 	if maybe_value.is_err() {
+	// 		return err(_);
+	// 	}	
+	// 	let constant_k = maybe_value.expect("value checked to be 'some'; eqd");
+	// 	constant_k.integer_sqrt()
+	// }
 
 	pub fn new_pool_function<T: IntegerSquareRoot + CheckedAdd + CheckedMul + CheckedDiv>(
 		a: T,

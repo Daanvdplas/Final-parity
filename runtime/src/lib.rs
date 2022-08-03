@@ -19,6 +19,7 @@ use sp_runtime::{
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature,
 };
+use frame_support::PalletId;
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -235,7 +236,11 @@ impl pallet_timestamp::Config for Runtime {
 	type WeightInfo = ();
 }
 
-impl pallet_balances::Config for Runtime {
+parameter_types! {
+	pub const ExistentialDeposit: u128 = 1000;
+}
+
+impl pallet_balances::Config for Test {
 	type MaxLocks = ConstU32<50>;
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
@@ -244,9 +249,9 @@ impl pallet_balances::Config for Runtime {
 	/// The ubiquitous event type.
 	type Event = Event;
 	type DustRemoval = ();
-	type ExistentialDeposit = ConstU128<500>;
+	type ExistentialDeposit = ExistentialDeposit;
 	type AccountStore = System;
-	type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
+	type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
 }
 
 impl pallet_transaction_payment::Config for Runtime {
@@ -264,23 +269,23 @@ impl pallet_sudo::Config for Runtime {
 }
 
 parameter_types! {
-	pub const DEX_pallet: PalletId = PalletId(*b"DEX");
-	pub const MaxLiquidityProviders: u32 = 6u32;
+	pub const DEX_pallet: PalletId = PalletId(*b"DEX_POOL");
 }
 
 /// Configure the pallet-template in pallets/template.
 impl pallet_template::Config for Runtime {
 	type Event = Event;
 	type Tokens = Assets;
+	type Balances = Balances;
 	type PalletId = DEX_pallet;
-	type MaxLiquidityProviders = MaxLiquidityProviders;
+	type MaxLiqProviders = frame_support::pallet_prelude::ConstU32<4>;
 }
 
 parameter_types! {
-	pub const AssetDeposit: Balance = 100_000;
-    pub const MetadataDepositBase: Balance = 10_000;
-	pub const MetadataDepositPerByte: Balance = 1_000;
-	pub const ApprovalDeposit: Balance = 1_000;
+	pub const AssetDeposit: Balance = 1;
+    pub const MetadataDepositBase: Balance = 1;
+	pub const MetadataDepositPerByte: Balance = 1;
+	pub const ApprovalDeposit: Balance = 1;
 	pub const StringLimit: u32 = 50;
 }
 
@@ -318,6 +323,7 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
 		Assets: pallet_assets,
+		Balances: pallet_balances
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
 	}

@@ -192,7 +192,7 @@ fn testnet_genesis(
 					(3u32, b"ADA".to_vec(), b"ADA".to_vec(), 6u8),
 					(4u32, b"BTC".to_vec(), b"BTC".to_vec(), 6u8),
 				],
-				accounts,
+				accounts: DOT,
 			}
 		},
 	}
